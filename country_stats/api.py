@@ -82,40 +82,47 @@ def api_by_country():
         requested_countries = normalized_params['Country']
         #check if multiple values for country
         if(type(requested_countries) == list):
-            country_sql_select = "SELECT * FROM countries WHERE Country IN " + str(tuple(requested_countries))
+            country_sql_select = "SELECT * FROM countries WHERE Country IN " 
+            country_sql_params = "("+"?, "*(len(requested_countries)-1) +"?)" 
+            country_sql_select += country_sql_params
+            requested_countries = tuple(requested_countries)
+
         #Single value is a string
         else:
-            requested_country = "\'"+requested_countries + "\'"
-            country_sql_select = "SELECT * FROM countries WHERE Country = " + requested_country
+            country_sql_select = "SELECT * FROM countries WHERE Country = (?)"
+            requested_countries = (requested_countries,)
     # No country requested
     else:
         country_sql_select = ""
+    #Check if continent was specified
     if(normalized_params.get('Continent')):
         requested_continents = normalized_params['Continent']
         #check if multiple values for country
         if(type(requested_continents) == list):
-            continent_sql_select = "SELECT * FROM countries WHERE Region IN " + str(tuple(requested_continents))
+            continent_sql_select = "SELECT * FROM countries WHERE Region IN " 
+            continent_sql_params = "("+"?, "*(len(requested_continents)-1) +"?)" 
+            continent_sql_select += continent_sql_params
+            requested_continents = tuple(requested_continents)
         #Single value is a string
         else:
-            requested_continent = "\'"+requested_continents + "\'"
-            continent_sql_select = "SELECT * FROM countries WHERE Region = " + requested_continent
+            continent_sql_select = "SELECT * FROM countries WHERE Region = (?)"
+            requested_continents =(requested_continents,)
     # No country requested
     else:
         continent_sql_select = ""    
+        requested_continents = ()
+    
 
-    #Only countries or empty
-    if(continent_sql_select == ""):
-        params_sql_select = country_sql_select
-    #Only continents
-    elif(country_sql_select == ""):
-        params_sql_select = continent_sql_select
-    #Both countries and continents
-    else:
-        params_sql_select = country_sql_select +" UNION " + continent_sql_select
+    country_sql_select += ";"    
+    continent_sql_select += ";"
+    #requested_country_stats = cur.execute(params_sql_select).fetchall()
 
-        
-    params_sql_select += ";"
-    requested_country_stats = cur.execute(params_sql_select).fetchall()
+    #Sanitize the sql statement to prevent SQL injection
+    requested_country_stats = cur.execute(country_sql_select, requested_countries).fetchall()
+    requested_continent_stats = cur.execute(continent_sql_select, requested_continents).fetchall()
+
+    requested_country_stats = requested_country_stats + requested_continent_stats
+
 
     conn.close()
     return(jsonify(requested_country_stats))
@@ -141,18 +148,21 @@ def api_by_continent():
         requested_continents = normalized_params['Continent']
         #check if multiple values for continent
         if(type(requested_continents) == list):
+            requested_continents = tuple(requested_continents)
+
             continent_sql_select_start  = "SELECT Region, SUM(Population), SUM(Area), AVG(Pop_Density), AVG(Coastline_Ratio), SUM(Net_Migration), "
             continent_sql_select_middle1 = "AVG(Infant_Mortality), AVG(GDP_Per_Capita), AVG(Literacy), AVG(Phones), AVG(Arable), AVG(Crops), AVG(Other), "
             continent_sql_select_middle2 = "AVG(Climate), AVG(Birthrate), AVG(Deathrate), AVG(Agriculture), AVG(Industry), AVG(Service) "
-            continent_sql_select_end = "FROM countries WHERE Region IN " + str(tuple(requested_continents)) + " GROUP BY Region "#Single value is a string
+            continent_sql_select_end = "FROM countries WHERE Region IN " + "("+("?, ")*(len(requested_continents)-1) + "?) GROUP BY Region "
             continent_sql_select = continent_sql_select_start + continent_sql_select_middle1 + continent_sql_select_middle2 + continent_sql_select_end
+        #requested_continents is string
         else:
-            requested_continent = "\'"+requested_continents + "\'"
+            requested_continents = (requested_continents,)
             #= "SELECT * FROM countries WHERE Region = " + requested_continent
             continent_sql_select_start  = "SELECT Region, SUM(Population), SUM(Area), AVG(Pop_Density), AVG(Coastline_Ratio), SUM(Net_Migration), "
             continent_sql_select_middle1 = "AVG(Infant_Mortality), AVG(GDP_Per_Capita), AVG(Literacy), AVG(Phones), AVG(Arable), AVG(Crops), AVG(Other), "
             continent_sql_select_middle2 = "AVG(Climate), AVG(Birthrate), AVG(Deathrate), AVG(Agriculture), AVG(Industry), AVG(Service) "
-            continent_sql_select_end = "FROM countries WHERE Region = " + requested_continent + " GROUP BY Region "
+            continent_sql_select_end = "FROM countries WHERE Region = (?) GROUP BY Region "
             continent_sql_select = continent_sql_select_start + continent_sql_select_middle1 + continent_sql_select_middle2 + continent_sql_select_end
     # No country requested
     else:
@@ -160,7 +170,7 @@ def api_by_continent():
 
 
     continent_sql_select += ";"
-    requested_continent_stats = cur.execute(continent_sql_select).fetchall() 
+    requested_continent_stats = cur.execute(continent_sql_select, requested_continents).fetchall() 
     
     #Close the SQL database
     conn.close()
